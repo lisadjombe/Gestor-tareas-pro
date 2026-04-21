@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📋 Gestor de Tareas - Web</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            width: 100%;
+            max-width: 500px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .formulario {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        .formulario input {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        .formulario input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .formulario button {
+            padding: 15px 25px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .formulario button:hover {
+            background: #5a67d8;
+        }
+        .lista-tareas {
+            list-style: none;
+        }
+        .tarea {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+        }
+        .tarea:hover {
+            background: #e9ecef;
+        }
+        .tarea.completada {
+            opacity: 0.7;
+            background: #e8f5e9;
+        }
+        .tarea.completada .descripcion {
+            text-decoration: line-through;
+            color: #6c757d;
+        }
+        .tarea-izquierda {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .descripcion {
+            font-size: 16px;
+        }
+        .acciones {
+            display: flex;
+            gap: 10px;
+        }
+        .btn-completar {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        .btn-completar:hover {
+            background: #218838;
+        }
+        .btn-eliminar {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        .btn-eliminar:hover {
+            background: #c82333;
+        }
+        .vacio {
+            text-align: center;
+            color: #6c757d;
+            padding: 40px;
+            font-size: 18px;
+        }
+        .contador {
+            margin-top: 20px;
+            color: #6c757d;
+            text-align: center;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            <span>📋</span> Mis Tareas
+        </h1>
+        
+        <form class="formulario" action="/añadir" method="POST">
+            <input type="text" name="descripcion" placeholder="Escribe una nueva tarea..." required autocomplete="off">
+            <button type="submit">➕ Añadir</button>
+        </form>
+        
+        <ul class="lista-tareas">
+            {% if tareas %}
+                {% for tarea in tareas %}
+                <li class="tarea {% if tarea.completada %}completada{% endif %}">
+                    <div class="tarea-izquierda">
+                        <span class="descripcion">{{ tarea.descripcion }}</span>
+                    </div>
+                    <div class="acciones">
+                        {% if not tarea.completada %}
+                        <a href="/completar/{{ loop.index0 }}">
+                            <button class="btn-completar">✅</button>
+                        </a>
+                        {% endif %}
+                        <a href="/eliminar/{{ loop.index0 }}">
+                            <button class="btn-eliminar">🗑️</button>
+                        </a>
+                    </div>
+                </li>
+                {% endfor %}
+            {% else %}
+                <div class="vacio">
+                    <p>🎉 ¡No hay tareas pendientes!</p>
+                    <p style="font-size: 14px; margin-top: 10px;">Añade una nueva tarea arriba</p>
+                </div>
+            {% endif %}
+        </ul>
+        
+        <div class="contador">
+            {% set pendientes = tareas | selectattr('completada', 'equalto', false) | list | length %}
+            {{ pendientes }} tarea{% if pendientes != 1 %}s{% endif %} pendiente{% if pendientes != 1 %}s{% endif %}
+        </div>
+    </div>
+</body>
+</html>

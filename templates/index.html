@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📋 Gestor de Tareas PRO</title>
+    <style>
+        /* ========== VARIABLES ========== */
+        :root {
+            --bg-gradient-start: #667eea;
+            --bg-gradient-end: #764ba2;
+            --card-bg: #ffffff;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --border-color: #e0e0e0;
+            --task-bg: #f8f9fa;
+            --task-completed-bg: #e9ecef;
+            --shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        [data-theme="dark"] {
+            --bg-gradient-start: #1a1a2e;
+            --bg-gradient-end: #16213e;
+            --card-bg: #2d2d44;
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0c0;
+            --border-color: #444466;
+            --task-bg: #3a3a5c;
+            --task-completed-bg: #2a2a4a;
+            --shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+        
+        /* ========== ESTILOS BASE ========== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: var(--card-bg);
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            padding: 30px;
+            width: 100%;
+            max-width: 700px;
+        }
+        
+        /* ========== HEADER ========== */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: var(--text-primary);
+            font-size: 2em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .theme-toggle {
+            background: var(--task-bg);
+            border: none;
+            font-size: 24px;
+            padding: 10px 15px;
+            border-radius: 50px;
+            cursor: pointer;
+        }
+        
+        /* ========== BARRA DE PROGRESO ========== */
+        .progreso-container {
+            margin-bottom: 20px;
+        }
+        
+        .progreso-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .progreso-barra {
+            height: 10px;
+            background: var(--border-color);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .progreso-relleno {
+            height: 100%;
+            background: linear-gradient(90deg, #00b894, #00cec9);
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+        
+        /* ========== BUSCADOR Y FILTROS ========== */
+        .search-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .search-box {
+            flex: 2;
+            min-width: 200px;
+            display: flex;
+            align-items: center;
+            background: var(--task-bg);
+            border-radius: 12px;
+            padding: 0 15px;
+        }
+        
+        .search-box input {
+            width: 100%;
+            padding: 12px 0;
+            border: none;
+            background: transparent;
+            color: var(--text-primary);
+            font-size: 16px;
+        }
+        
+        .search-box input::placeholder {
+            color: var(--text-secondary);
+        }
+        
+        .search-box input:focus {
+            outline: none;
+        }
+        
+        .filter-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .filter-btn {
+            padding: 10px 15px;
+            background: var(--task-bg);
+            border: none;
+            border-radius: 10px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .filter-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        /* ========== FORMULARIO ========== */
+        .formulario {
+            background: var(--task-bg);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .form-row input[type="text"] {
+            flex: 2;
+            min-width: 200px;
+            padding: 12px 15px;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 16px;
+            background: var(--card-bg);
+            color: var(--text-primary);
+        }
+        
+        .form-row select, .form-row input[type="date"] {
+            padding: 12px 15px;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 14px;
+            background: var(--card-bg);
+            color: var(--text-primary);
+        }
+        
+        .prioridad-selector {
+            display: flex;
+            gap: 5px;
+            background: var(--card-bg);
+            padding: 5px;
+            border-radius: 12px;
+        }
+        
+        .prioridad-option {
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .prioridad-option.alta { color: #dc3545; }
+        .prioridad-option.media { color: #ffc107; }
+        .prioridad-option.baja { color: #28a745; }
+        
+        .prioridad-option.seleccionada.alta { background: #dc3545; color: white; }
+        .prioridad-option.seleccionada.media { background: #ffc107; color: white; }
+        .prioridad-option.seleccionada.baja { background: #28a745; color: white; }
+        
+        .btn-añadir {
+            padding: 12px 25px;
+            background: #00b894;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+        }
+        
+        .btn-añadir:hover {
+            background: #00a884;
+        }
+        
+        /* ========== LISTA DE TAREAS ========== */
+        .stats-mini {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .lista-tareas {
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        
+        .tarea {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            background: var(--task-bg);
+            border-radius: 12px;
+            margin-bottom: 10px;
+            border-left: 4px solid #ccc;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .tarea.urgente {
+            border-left-color: #e74c3c !important;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.2); }
+            50% { box-shadow: 0 0 0 5px rgba(231, 76, 60, 0); }
+        }
+        
+        .tarea.proxima {
+            border-left-color: #f39c12 !important;
+        }
+        
+        .tarea.vencida {
+            border-left-color: #95a5a6 !important;
+            opacity: 0.8;
+        }
+        
+        .tarea.completada {
+            opacity: 0.6;
+            background: var(--task-completed-bg);
+        }
+        
+        .tarea.completada .descripcion {
+            text-decoration: line-through;
+        }
+        
+        .tarea-izquierda {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+        }
+        
+        .tarea-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .descripcion {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        
+        .meta-info {
+            display: flex;
+            gap: 10px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            flex-wrap: wrap;
+        }
+        
+        .categoria-badge {
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .acciones {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .btn-icon {
+            padding: 8px 10px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 14px;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .btn-completar { background: #28a745; }
+        .btn-editar { background: #3498db; }
+        .btn-eliminar { background: #dc3545; }
+        
+        .vacio {
+            text-align: center;
+            color: var(--text-secondary);
+            padding: 40px;
+        }
+        
+        .prioridad-radio { display: none; }
+        
+        /* ========== MODAL DE EDICIÓN ========== */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 450px;
+        }
+        
+        .modal-content h3 {
+            color: var(--text-primary);
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Mis Tareas PRO</h1>
+            <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+        </div>
+        
+        <!-- PROGRESO -->
+        <div class="progreso-container">
+            <div class="progreso-stats">
+                <span>📊 Progreso: <span id="completadas-count">{{ completadas }}</span>/<span id="total-count">{{ total }}</span></span>
+                <span><strong id="progreso-porcentaje">{{ progreso }}%</strong></span>
+            </div>
+            <div class="progreso-barra">
+                <div class="progreso-relleno" style="width: {{ progreso }}%;"></div>
+            </div>
+        </div>
+        
+        <!-- BUSCADOR Y FILTROS -->
+        <div class="search-section">
+            <div class="search-box">
+                <span>🔍</span>
+                <input type="text" id="search-input" placeholder="Buscar tareas..." onkeyup="filtrarTareas()">
+            </div>
+            <div class="filter-buttons">
+                <button class="filter-btn active" onclick="filtrarPorCategoria('todas')">Todas</button>
+                {% for cat_id, cat_data in categorias.items() %}
+                    {% if cat_id in categorias_usadas %}
+                    <button class="filter-btn" onclick="filtrarPorCategoria('{{ cat_id }}')">{{ cat_data.nombre }}</button>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- FORMULARIO -->
+        <form class="formulario" action="/añadir" method="POST">
+            <div class="form-row">
+                <input type="text" name="descripcion" placeholder="¿Qué tienes que hacer?" required>
+            </div>
+            <div class="form-row">
+                <select name="categoria">
+                    {% for cat_id, cat_data in categorias.items() %}
+                    <option value="{{ cat_id }}">{{ cat_data.nombre }}</option>
+                    {% endfor %}
+                </select>
+                <input type="date" name="fecha_limite">
+                <div class="prioridad-selector">
+                    <label class="prioridad-option alta">🔴<input type="radio" name="prioridad" value="alta" class="prioridad-radio"></label>
+                    <label class="prioridad-option media seleccionada">🟡<input type="radio" name="prioridad" value="media" class="prioridad-radio" checked></label>
+                    <label class="prioridad-option baja">🟢<input type="radio" name="prioridad" value="baja" class="prioridad-radio"></label>
+                </div>
+            </div>
+            <button type="submit" class="btn-añadir">➕ Añadir Tarea</button>
+        </form>
+        
+        <!-- ESTADÍSTICAS RÁPIDAS -->
+        <div class="stats-mini">
+            <span id="resultados-count">{{ total }} tareas</span>
+            <span>⚡ Urgentes: <span id="urgentes-count">0</span></span>
+        </div>
+        
+        <!-- LISTA DE TAREAS -->
+        <div class="lista-tareas" id="lista-tareas">
+            {% if tareas %}
+                {% for tarea in tareas %}
+                <div class="tarea {{ 'urgente' if tarea.urgente else '' }} {{ 'proxima' if tarea.proxima else '' }} {{ 'vencida' if tarea.vencida else '' }} {% if tarea.completada %}completada{% endif %}" 
+                     data-categoria="{{ tarea.categoria }}"
+                     data-prioridad="{{ tarea.prioridad }}"
+                     data-indice="{{ loop.index0 }}">
+                    <div class="tarea-izquierda">
+                        <span>
+                            {% if tarea.prioridad == 'alta' %}🔴
+                            {% elif tarea.prioridad == 'media' %}🟡
+                            {% else %}🟢{% endif %}
+                        </span>
+                        <div class="tarea-info">
+                            <span class="descripcion">{{ tarea.descripcion }}</span>
+                            <div class="meta-info">
+                                <span class="categoria-badge" style="background: {{ categorias[tarea.categoria]['color'] }}20; color: {{ categorias[tarea.categoria]['color'] }};">
+                                    {{ categorias[tarea.categoria]['nombre'] }}
+                                </span>
+                                {% if tarea.fecha_limite %}
+                                <span>📅 {{ tarea.fecha_limite }}</span>
+                                {% endif %}
+                                <span>🕐 {{ tarea.fecha[:10] }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="acciones">
+                        <a href="/completar/{{ loop.index0 }}" class="btn-icon btn-completar">
+                            {% if tarea.completada %}↩️{% else %}✅{% endif %}
+                        </a>
+                        <button class="btn-icon btn-editar" onclick="abrirModal({{ loop.index0 }})">✏️</button>
+                        <a href="/eliminar/{{ loop.index0 }}" class="btn-icon btn-eliminar" onclick="return confirm('¿Eliminar tarea?')">🗑️</a>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="vacio" id="vacio-mensaje">
+                    <p>🎉 ¡No hay tareas pendientes!</p>
+                    <p style="font-size: 14px; margin-top: 10px;">Añade una nueva tarea arriba</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- MODAL DE EDICIÓN -->
+    <div class="modal" id="editModal">
+        <div class="modal-content">
+            <h3>✏️ Editar Tarea</h3>
+            <form id="editForm" action="/editar" method="POST">
+                <input type="hidden" name="indice" id="edit-indice">
+                <div style="margin-bottom: 15px;">
+                    <label style="color: var(--text-primary);">Descripción</label>
+                    <input type="text" name="descripcion" id="edit-descripcion" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); margin-top: 5px;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="color: var(--text-primary);">Categoría</label>
+                    <select name="categoria" id="edit-categoria" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); margin-top: 5px;">
+                        {% for cat_id, cat_data in categorias.items() %}
+                        <option value="{{ cat_id }}">{{ cat_data.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="color: var(--text-primary);">Fecha límite</label>
+                    <input type="date" name="fecha_limite" id="edit-fecha" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); margin-top: 5px;">
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" style="flex: 1; padding: 12px; background: #00b894; color: white; border: none; border-radius: 10px; cursor: pointer;">💾 Guardar</button>
+                    <button type="button" onclick="cerrarModal()" style="flex: 1; padding: 12px; background: var(--task-bg); color: var(--text-primary); border: none; border-radius: 10px; cursor: pointer;">❌ Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        // ========== TEMA OSCURO/CLARO ==========
+        function toggleTheme() {
+            const body = document.body;
+            const theme = body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', theme);
+            document.querySelector('.theme-toggle').textContent = theme === 'dark' ? '☀️' : '🌙';
+            localStorage.setItem('theme', theme);
+        }
+        
+        // Cargar tema guardado
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.body.setAttribute('data-theme', savedTheme);
+        document.querySelector('.theme-toggle').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        
+        // ========== SELECTOR DE PRIORIDAD ==========
+        document.querySelectorAll('.prioridad-option').forEach(label => {
+            label.addEventListener('click', function() {
+                this.parentElement.querySelectorAll('.prioridad-option').forEach(l => l.classList.remove('seleccionada'));
+                this.classList.add('seleccionada');
+                this.querySelector('input').checked = true;
+            });
+        });
+        
+        // ========== FILTROS ==========
+        let categoriaActual = 'todas';
+        let busquedaActual = '';
+        
+        function filtrarTareas() {
+            busquedaActual = document.getElementById('search-input').value.toLowerCase();
+            aplicarFiltros();
+        }
+        
+        function filtrarPorCategoria(cat) {
+            categoriaActual = cat;
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            aplicarFiltros();
+        }
+        
+        function aplicarFiltros() {
+            const tareas = document.querySelectorAll('.tarea');
+            let visibles = 0;
+            let urgentes = 0;
+            
+            tareas.forEach(tarea => {
+                const descripcion = tarea.querySelector('.descripcion')?.textContent.toLowerCase() || '';
+                const categoria = tarea.dataset.categoria;
+                const esUrgente = tarea.classList.contains('urgente');
+                
+                const coincideBusqueda = descripcion.includes(busquedaActual);
+                const coincideCategoria = categoriaActual === 'todas' || categoria === categoriaActual;
+                
+                if (coincideBusqueda && coincideCategoria) {
+                    tarea.style.display = 'flex';
+                    visibles++;
+                    if (esUrgente) urgentes++;
+                } else {
+                    tarea.style.display = 'none';
+                }
+            });
+            
+            document.getElementById('resultados-count').textContent = visibles + ' tareas';
+            document.getElementById('urgentes-count').textContent = urgentes;
+            
+            // Mostrar mensaje si no hay resultados
+            const vacio = document.getElementById('vacio-mensaje');
+            if (visibles === 0 && !vacio) {
+                const container = document.getElementById('lista-tareas');
+                container.innerHTML = '<div class="vacio" id="vacio-mensaje"><p>🔍 No se encontraron tareas</p></div>';
+            }
+        }
+        
+        // Contar urgentes al cargar
+        window.onload = function() {
+            const urgentes = document.querySelectorAll('.tarea.urgente').length;
+            document.getElementById('urgentes-count').textContent = urgentes;
+        };
+        
+        // ========== MODAL DE EDICIÓN ==========
+        const tareasData = {{ tareas | tojson }};
+        
+        function abrirModal(indice) {
+            const tarea = tareasData[indice];
+            document.getElementById('edit-indice').value = indice;
+            document.getElementById('edit-descripcion').value = tarea.descripcion;
+            document.getElementById('edit-categoria').value = tarea.categoria || 'otro';
+            document.getElementById('edit-fecha').value = tarea.fecha_limite || '';
+            document.getElementById('editModal').style.display = 'flex';
+        }
+        
+        function cerrarModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+        
+        // Cerrar modal al hacer clic fuera
+        window.onclick = function(event) {
+            const modal = document.getElementById('editModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        };
+    </script>
+</body>
+</html>
