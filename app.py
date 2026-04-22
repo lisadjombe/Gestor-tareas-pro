@@ -10,6 +10,22 @@ import io
 import json   # <--- AÑADE ESTO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import io
+
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'oficina-secreta-2024'
@@ -1167,6 +1183,7 @@ def navbar_html():
             {'''<a href="/admin/empleados">👥 Empleados</a>
             <a href="/admin/panel-horario">⏰ Panel Horario</a>
             <a href="/admin/asignar">📋 Asignar Tarea</a>
+             <a href="/admin/informe-mensual">📊 Informe PDF</a>
             <a href="/admin/tipos-expediente">⚙️ Tipos Expediente</a>''' if session.get('rol') == 'admin' else ''}
             <a href="/logout" style="background: #e74c3c; color: white; padding: 6px 12px; border-radius: 20px; font-size: 12px; text-decoration: none;">🚪</a>
         </div>
@@ -2112,21 +2129,6 @@ def editar_empleado(id):
     """
     return base_html(content, "Editar Empleado")
 
-@app.route('/admin/empleado/eliminar/<int:id>')
-def eliminar_empleado(id):
-    if 'user_id' not in session or session.get('rol') != 'admin':
-        return redirect('/dashboard')
-    
-    empleado = Usuario.query.get_or_404(id)
-    if empleado.rol != 'admin':
-        Tarea.query.filter_by(usuario_id=id).delete()
-        db.session.delete(empleado)
-        db.session.commit()
-        flash('✅ Empleado eliminado')
-    else:
-        flash('❌ No se puede eliminar al administrador')
-    
-    return redirect('/admin/empleados')
 
 @app.route('/admin/asignar', methods=['GET', 'POST'])
 def admin_asignar():
@@ -3760,7 +3762,282 @@ def nuevo_tipo_expediente():
     return base_html(content, "Nuevo Tipo Expediente")
 
 
+@app.route('/admin/empleado/eliminar/<int:id>')
+@login_required
+def eliminar_empleado(id):
+    if session.get('rol') != 'admin':
+        return redirect('/dashboard')
+    
+    empleado = db.session.get(Usuario, id)
+    if not empleado:
+        flash('❌ Empleado no encontrado')
+        return redirect('/admin/empleados')
+    
+    if empleado.rol == 'admin':
+        flash('❌ No se puede eliminar al administrador')
+        return redirect('/admin/empleados')
+    
+    # 1. Eliminar documentos de expedientes del empleado
+    for expediente in empleado.expedientes:
+        for doc in expediente.documentos:
+            db.session.delete(doc)
+        db.session.delete(expediente)
+    
+    # 2. Eliminar mensajes
+    Mensaje.query.filter((Mensaje.emisor_id == id) | (Mensaje.receptor_id == id)).delete()
+    
+    # 3. Eliminar mensajes grupales
+    MensajeGrupal.query.filter_by(usuario_id=id).delete()
+    
+    # 4. Eliminar fichajes
+    Fichaje.query.filter_by(usuario_id=id).delete()
+    
+    # 5. Eliminar tareas asignadas
+    Tarea.query.filter_by(usuario_id=id).delete()
+    
+    # 6. Eliminar notas personales
+    NotaPersonal.query.filter_by(usuario_id=id).delete()
+    
+    # 7. Eliminar tareas personales
+    TareaPersonal.query.filter_by(usuario_id=id).delete()
+    
+    # 8. Eliminar clientes
+    Cliente.query.filter_by(usuario_id=id).delete()
+    
+    # 9. Eliminar interacciones de clientes
+    Interaccion.query.filter_by(usuario_id=id).delete()
+    
+    # 10. Eliminar comentarios
+    Comentario.query.filter_by(usuario_id=id).delete()
+    
+    # 11. Finalmente eliminar el empleado
+    db.session.delete(empleado)
+    db.session.commit()
+    
+    flash(f'✅ Empleado {empleado.nombre_completo} eliminado')
+    return redirect('/admin/empleados')
 
+@app.route('/admin/informe-mensual')
+@login_required
+def informe_mensual():
+    if session.get('rol') != 'admin':
+        return redirect('/dashboard')
+    
+    # Obtener mes actual
+    hoy = datetime.now()
+    nombre_mes = hoy.strftime('%B %Y').capitalize()
+    inicio_mes = hoy.replace(day=1).strftime('%Y-%m-%d')
+    
+    # Tareas del mes por departamento
+    tareas_mes = Tarea.query.filter(Tarea.fecha_creacion >= inicio_mes).all()
+    
+    # Agrupar por departamento
+    deptos_data = {}
+    for t in tareas_mes:
+        depto = t.asignado.departamento if t.asignado else 'General'
+        if depto not in deptos_data:
+            deptos_data[depto] = {'total': 0, 'completadas': 0, 'pendientes': 0, 'alta': 0, 'media': 0, 'baja': 0}
+        deptos_data[depto]['total'] += 1
+        if t.completada:
+            deptos_data[depto]['completadas'] += 1
+        else:
+            deptos_data[depto]['pendientes'] += 1
+        deptos_data[depto][t.prioridad] += 1
+    
+    # Estadísticas generales
+    total_empleados = Usuario.query.filter_by(rol='empleado').count()
+    total_clientes = Cliente.query.filter(Cliente.fecha_creacion >= inicio_mes).count()
+    total_expedientes = Expediente.query.filter(Expediente.fecha_creacion >= inicio_mes).count()
+    
+    # Crear PDF
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=2*cm, bottomMargin=2*cm)
+    elements = []
+    
+    styles = getSampleStyleSheet()
+    
+    # ========== PORTADA ==========
+    # Título principal
+    title_style = ParagraphStyle(
+        'MainTitle',
+        parent=styles['Title'],
+        fontSize=28,
+        textColor=colors.HexColor('#1a73e8'),
+        alignment=1,
+        spaceAfter=40
+    )
+    elements.append(Paragraph("OFFICE ADMINISTRATION", title_style))
+    
+    # Subtítulo
+    subtitle_style = ParagraphStyle(
+        'Subtitle',
+        parent=styles['Heading2'],
+        fontSize=18,
+        textColor=colors.HexColor('#2c3e50'),
+        alignment=1,
+        spaceAfter=20
+    )
+    elements.append(Paragraph("Informe Mensual de Productividad", subtitle_style))
+    
+    # Línea decorativa
+    elements.append(Spacer(1, 0.5*cm))
+    elements.append(Paragraph("<hr width='50%' color='#1a73e8' size='2'>", styles['Normal']))
+    elements.append(Spacer(1, 1*cm))
+    
+    # Información del período
+    info_style = ParagraphStyle(
+        'Info',
+        parent=styles['Normal'],
+        fontSize=14,
+        alignment=1,
+        spaceAfter=10
+    )
+    elements.append(Paragraph(f"<b>Período:</b> {nombre_mes}", info_style))
+    elements.append(Paragraph(f"<b>Fecha de emisión:</b> {hoy.strftime('%d de %B de %Y')}", info_style))
+    elements.append(Spacer(1, 2*cm))
+    
+    # Resumen ejecutivo
+    elements.append(Paragraph("<b>Resumen Ejecutivo</b>", styles['Heading2']))
+    elements.append(Spacer(1, 0.5*cm))
+    
+    resumen_data = [
+        ['Indicador', 'Valor'],
+        ['Total Empleados', str(total_empleados)],
+        ['Tareas del Mes', str(len(tareas_mes))],
+        ['Clientes Nuevos', str(total_clientes)],
+        ['Expedientes Creados', str(total_expedientes)],
+        ['Productividad General', f"{int((sum(d['completadas'] for d in deptos_data.values())/len(tareas_mes)*100)) if tareas_mes else 0}%"]
+    ]
+    
+    resumen_table = Table(resumen_data, colWidths=[8*cm, 4*cm])
+    resumen_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a73e8')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+    ]))
+    elements.append(resumen_table)
+    
+    # Salto de página
+    elements.append(PageBreak())
+    
+    # ========== PÁGINA 2: Detalle por Departamento ==========
+    elements.append(Paragraph("Análisis por Departamento", styles['Heading1']))
+    elements.append(Spacer(1, 0.5*cm))
+    
+    # Tabla de departamentos
+    data = [['Departamento', 'Total', 'Completadas', 'Pendientes', 'Alta', 'Media', 'Baja', 'Productividad']]
+    
+    for depto, stats in sorted(deptos_data.items()):
+        prod = int((stats['completadas'] / stats['total'] * 100)) if stats['total'] > 0 else 0
+        data.append([
+            depto,
+            str(stats['total']),
+            str(stats['completadas']),
+            str(stats['pendientes']),
+            str(stats['alta']),
+            str(stats['media']),
+            str(stats['baja']),
+            f"{prod}%"
+        ])
+    
+    # Totales
+    total_general = sum(s['total'] for s in deptos_data.values())
+    total_completadas = sum(s['completadas'] for s in deptos_data.values())
+    total_pendientes = sum(s['pendientes'] for s in deptos_data.values())
+    prod_general = int((total_completadas / total_general * 100)) if total_general > 0 else 0
+    
+    data.append([
+        'TOTAL',
+        str(total_general),
+        str(total_completadas),
+        str(total_pendientes),
+        '',
+        '',
+        '',
+        f"{prod_general}%"
+    ])
+    
+    table = Table(data, repeatRows=1, colWidths=[3*cm, 1.5*cm, 2*cm, 2*cm, 1.5*cm, 1.5*cm, 1.5*cm, 2*cm])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, 1), (-1, -2), colors.white),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ecf0f1')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f8f9fa')]),
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 1*cm))
+    
+    # ========== Top Empleados ==========
+    elements.append(Paragraph("🏆 Top 5 Empleados por Productividad", styles['Heading2']))
+    elements.append(Spacer(1, 0.3*cm))
+    
+    empleados = Usuario.query.filter_by(rol='empleado').all()
+    ranking = []
+    for emp in empleados:
+        tareas_emp = Tarea.query.filter_by(usuario_id=emp.id).filter(Tarea.fecha_creacion >= inicio_mes).all()
+        if tareas_emp:
+            completadas = sum(1 for t in tareas_emp if t.completada)
+            prod = int((completadas / len(tareas_emp) * 100))
+            ranking.append((emp.nombre_completo, emp.departamento, len(tareas_emp), completadas, prod))
+    
+    ranking.sort(key=lambda x: x[4], reverse=True)
+    top5 = ranking[:5]
+    
+    if top5:
+        top_data = [['#', 'Empleado', 'Departamento', 'Tareas', 'Completadas', 'Productividad']]
+        for i, (nombre, depto, total, comp, prod) in enumerate(top5, 1):
+            medalla = {1: '🥇', 2: '🥈', 3: '🥉'}.get(i, f'{i}º')
+            top_data.append([medalla, nombre, depto, str(total), str(comp), f"{prod}%"])
+        
+        top_table = Table(top_data, repeatRows=1, colWidths=[1.5*cm, 5*cm, 3*cm, 2*cm, 2.5*cm, 2.5*cm])
+        top_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#27ae60')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+        ]))
+        elements.append(top_table)
+    
+    # ========== Pie de página ==========
+    elements.append(Spacer(1, 2*cm))
+    
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.grey,
+        alignment=1
+    )
+    elements.append(Paragraph("<hr width='100%' color='#bdc3c7' size='1'>", styles['Normal']))
+    elements.append(Spacer(1, 0.3*cm))
+    elements.append(Paragraph(f"Office Administration - Informe generado el {hoy.strftime('%d/%m/%Y a las %H:%M')}", footer_style))
+    elements.append(Paragraph("Documento confidencial - Solo para uso interno", footer_style))
+    
+    # Construir PDF
+    doc.build(elements)
+    buffer.seek(0)
+    
+    return send_file(
+        buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'Office_Administration_Informe_{hoy.strftime("%Y%m")}.pdf'
+    )
 
 # ========== INICIALIZACIÓN ==========
 with app.app_context():
