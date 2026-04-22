@@ -18,6 +18,23 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+
+import os
+from werkzeug.utils import secure_filename
+
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx', 'xls', 'xlsx', 'txt'}
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
+
+# Crear carpeta uploads si no existe
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 # ========== MODELOS ==========
 
 class Usuario(db.Model):
@@ -111,6 +128,48 @@ class MensajeGrupal(db.Model):
     departamento = db.Column(db.String(50), nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
     usuario = db.relationship('Usuario', backref='mensajes_grupales')
+
+class Fichaje(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)  # entrada, salida, pausa_inicio, pausa_fin
+    fecha_hora = db.Column(db.String(20), nullable=False)
+    fecha = db.Column(db.String(20), nullable=False)
+    usuario = db.relationship('Usuario', backref='fichajes')
+
+class TipoExpediente(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    descripcion = db.Column(db.Text)
+    departamento = db.Column(db.String(50), default='General')
+    color = db.Column(db.String(20), default='#3498db')
+    admin_id = db.Column(db.Integer, db.ForeignKey('usuario.id'))
+    admin = db.relationship('Usuario', backref='tipos_expediente')
+
+class Expediente(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    tipo_id = db.Column(db.Integer, db.ForeignKey('tipo_expediente.id'), nullable=False)
+    titulo = db.Column(db.String(200), nullable=False)
+    descripcion = db.Column(db.Text)
+    estado = db.Column(db.String(50), default='Abierto')
+    fecha_creacion = db.Column(db.String(20), default=datetime.now().strftime("%d/%m/%Y"))
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    departamento = db.Column(db.String(50))
+    
+    tipo = db.relationship('TipoExpediente', backref='expedientes')
+    usuario = db.relationship('Usuario', backref='expedientes')
+
+class Documento(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(200), nullable=False)
+    nombre_original = db.Column(db.String(200))
+    tipo_archivo = db.Column(db.String(50))
+    fecha_subida = db.Column(db.String(20), default=datetime.now().strftime("%d/%m/%Y %H:%M"))
+    expediente_id = db.Column(db.Integer, db.ForeignKey('expediente.id'), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
+    
+    expediente = db.relationship('Expediente', backref='documentos')
+    usuario = db.relationship('Usuario', backref='documentos')
 
 # ========== FUNCIONES AUXILIARES ==========
 
@@ -485,34 +544,47 @@ def base_html(content, titulo="Oficina"):
             margin: 0;
         }}
 
-        .navbar {{
+               .navbar {{
             background: #2c3e50;
             color: white;
-            padding: 12px 15px;
-            margin-bottom: 15px;
+            padding: 12px 20px;
+            margin-bottom: 20px;
             display: flex;
+            flex-wrap: wrap;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
+            gap: 15px;
         }}
-
-     .navbar a {{
+        .navbar a {{
             color: white;
             margin: 0 5px;
             text-decoration: none;
-            font-size: 14px;
+            font-size: 13px;
             white-space: nowrap;
+            padding: 5px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
         }}
-
-        .navbar a:hover {{ text-decoration: underline; }}
+        .navbar a:hover {{
+            background: rgba(255,255,255,0.1);
+        }}
+        @media (max-width: 1200px) {{
+            .navbar {{
+                flex-direction: column;
+                align-items: flex-start;
+            }}
+            .navbar div {{
+                width: 100%;
+                justify-content: flex-start;
+            }}
+        }}
 
         .container {{
             max-width: 1200px;
             margin: 0 auto;
             background: white;
             padding: 20px;
-            border-radius: 8px;
+            border-ssradius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             width: 100%;
             overflow-x: auto;
@@ -935,7 +1007,131 @@ def base_html(content, titulo="Oficina"):
                 padding: 8px 12px;
                 font-size: 14px;
             }}
-        }}    
+        }}   
+
+                /* CONTROL HORARIO */
+        .reloj-container {{
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: white;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+        }}
+        .reloj-tiempo {{
+            font-size: 64px;
+            font-weight: bold;
+            font-family: monospace;
+            margin: 20px 0;
+        }}
+        .reloj-estado {{
+            font-size: 18px;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }}
+        .fichaje-buttons {{
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }}
+        .btn-fichaje {{
+            padding: 15px 30px;
+            font-size: 18px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }}
+        .btn-entrada {{
+            background: #27ae60;
+            color: white;
+        }}
+        .btn-salida {{
+            background: #e74c3c;
+            color: white;
+        }}
+        .btn-pausa {{
+            background: #f39c12;
+            color: white;
+        }}
+        .btn-fichaje:disabled {{
+            opacity: 0.5;
+            cursor: not-allowed;
+        }}
+        .horario-info {{
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }}
+        .horario-card {{
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+        }} 
+        
+                /* EXPEDIENTES */
+        .expedientes-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }}
+        .expediente-card {{
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-top: 4px solid #3498db;
+            transition: transform 0.2s;
+        }}
+        .expediente-card:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }}
+        .expediente-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }}
+        .expediente-tipo {{
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }}
+        .expediente-estado {{
+            font-size: 12px;
+            padding: 3px 8px;
+            border-radius: 20px;
+        }}
+        .estado-abierto {{ background: #e8f5e9; color: #27ae60; }}
+        .estado-proceso {{ background: #fff3e0; color: #f39c12; }}
+        .estado-cerrado {{ background: #ffebee; color: #e74c3c; }}
+        .documentos-lista {{
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }}
+        .documento-item {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 5px;
+        }}
+        .documento-icono {{
+            font-size: 20px;
+        }}
+
+
         </style>
     </head>
     <body>
@@ -947,6 +1143,8 @@ def base_html(content, titulo="Oficina"):
     </body>
     </html>
     """
+
+
 def navbar_html():
     user_id = session.get('user_id')
     no_leidos = 0
@@ -958,16 +1156,20 @@ def navbar_html():
     return f"""
     <div class="navbar">
         <span><strong>🏢 OFICINA</strong> | 👤 {session.get('nombre')} ({session.get('rol')})</span>
-        <div>
+        <div style="display: flex; flex-wrap: wrap; gap: 5px; align-items: center;">
             <a href="/dashboard">📊 Dashboard</a>
             <a href="/mi-espacio">📌 Mi Espacio</a>
             <a href="/clientes">👥 Clientes</a>
+            <a href="/expedientes">📁 Expedientes</a>
             <a href="/chat">💬 Chat{badge_chat}</a>
-            <a href="/chat-grupal">👥 Chat Grupal</a>   <!-- AQUÍ ESTÁ PARA TODOS -->
+            <a href="/chat-grupal">👥 Chat Grupal</a>
+            <a href="/control-horario">⏰ Fichar</a>
             {'''<a href="/admin/empleados">👥 Empleados</a>
-            <a href="/admin/asignar">📋 Asignar Tarea</a>''' if session.get('rol') == 'admin' else ''}
+            <a href="/admin/panel-horario">⏰ Panel Horario</a>
+            <a href="/admin/asignar">📋 Asignar Tarea</a>
+            <a href="/admin/tipos-expediente">⚙️ Tipos Expediente</a>''' if session.get('rol') == 'admin' else ''}
             <a href="/logout" style="background: #e74c3c; color: white; padding: 6px 12px; border-radius: 20px; font-size: 12px; text-decoration: none;">🚪</a>
-                    </div>
+        </div>
     </div>
     """
 
@@ -2752,6 +2954,813 @@ def login_required(f):
             return redirect('/login')
         return f(*args, **kwargs)
     return decorated_function
+
+# ========== CONTROL HORARIO ==========
+@app.route('/control-horario')
+@login_required
+def control_horario():
+    user = db.session.get(Usuario, session['user_id'])
+    hoy = datetime.now().strftime('%d/%m/%Y')
+    
+    # Obtener fichajes de hoy
+    fichajes_hoy = Fichaje.query.filter_by(
+        usuario_id=user.id, 
+        fecha=hoy
+    ).order_by(Fichaje.fecha_hora).all()
+    
+    # Determinar estado actual
+    estado = 'fuera'
+    if fichajes_hoy:
+        ultimo = fichajes_hoy[-1]
+        if ultimo.tipo == 'entrada' or ultimo.tipo == 'pausa_fin':
+            estado = 'trabajando'
+        elif ultimo.tipo == 'pausa_inicio':
+            estado = 'pausa'
+        elif ultimo.tipo == 'salida':
+            estado = 'finalizado'
+    
+    # Calcular tiempo trabajado hoy
+    tiempo_trabajado = timedelta()
+    entrada_time = None
+    for f in fichajes_hoy:
+        if f.tipo == 'entrada':
+            entrada_time = datetime.strptime(f.fecha_hora, '%H:%M:%S')
+        elif f.tipo == 'salida' and entrada_time:
+            salida_time = datetime.strptime(f.fecha_hora, '%H:%M:%S')
+            tiempo_trabajado += (salida_time - entrada_time)
+            entrada_time = None
+        elif f.tipo == 'pausa_inicio' and entrada_time:
+            pausa_inicio = datetime.strptime(f.fecha_hora, '%H:%M:%S')
+            tiempo_trabajado += (pausa_inicio - entrada_time)
+            entrada_time = None
+        elif f.tipo == 'pausa_fin':
+            entrada_time = datetime.strptime(f.fecha_hora, '%H:%M:%S')
+    
+    if entrada_time:
+        tiempo_trabajado += (datetime.now() - entrada_time)
+    
+    horas = tiempo_trabajado.seconds // 3600
+    minutos = (tiempo_trabajado.seconds % 3600) // 60
+    segundos = tiempo_trabajado.seconds % 60
+    
+    # Verificar horario laboral (9:00 - 18:00)
+    hora_actual = datetime.now().hour
+    dentro_horario = 9 <= hora_actual < 18
+    
+    content = f"""
+        <h2>⏰ Control Horario</h2>
+        
+        <div class="reloj-container">
+            <div class="reloj-estado" id="estado-texto">
+                {'🟢 Trabajando' if estado == 'trabajando' else '🟡 En pausa' if estado == 'pausa' else '⚪ Fuera de jornada' if estado == 'finalizado' else '🔴 Sin fichar'}
+            </div>
+            <div class="reloj-tiempo" id="tiempo-trabajado">
+                {horas:02d}:{minutos:02d}:{segundos:02d}
+            </div>
+            <div class="fichaje-buttons">
+                <form method="POST" action="/fichar/entrada" style="display:inline;">
+                    <button type="submit" class="btn-fichaje btn-entrada" {'disabled' if estado != 'fuera' or not dentro_horario else ''}>
+                        🟢 Entrada
+                    </button>
+                </form>
+                <form method="POST" action="/fichar/pausa" style="display:inline;">
+                    <button type="submit" class="btn-fichaje btn-pausa" {'disabled' if estado not in ['trabajando', 'pausa'] else ''}>
+                        {'☕ Iniciar Pausa' if estado == 'trabajando' else '▶️ Finalizar Pausa'}
+                    </button>
+                </form>
+                <form method="POST" action="/fichar/salida" style="display:inline;">
+                    <button type="submit" class="btn-fichaje btn-salida" {'disabled' if estado not in ['trabajando', 'pausa'] else ''}>
+                        🔴 Salida
+                    </button>
+                </form>
+            </div>
+            {f'<p style="color:#e74c3c; margin-top:15px;">⏰ Fuera del horario laboral (9:00 - 18:00)</p>' if not dentro_horario else ''}
+        </div>
+        
+        <div class="horario-info">
+            <div class="horario-card">
+                <div style="font-size: 24px;">🕐</div>
+                <div style="font-weight: bold;">Entrada</div>
+                <div>{next((f.fecha_hora[:5] for f in fichajes_hoy if f.tipo == 'entrada'), '--:--')}</div>
+            </div>
+            <div class="horario-card">
+                <div style="font-size: 24px;">☕</div>
+                <div style="font-weight: bold;">Pausa</div>
+                <div>{'30 min' if any(f.tipo == 'pausa_inicio' for f in fichajes_hoy) else '--'}</div>
+            </div>
+            <div class="horario-card">
+                <div style="font-size: 24px;">🏁</div>
+                <div style="font-weight: bold;">Salida</div>
+                <div>{next((f.fecha_hora[:5] for f in fichajes_hoy if f.tipo == 'salida'), '--:--')}</div>
+            </div>
+        </div>
+        
+        <h3>📋 Historial de hoy</h3>
+        <table>
+            <thead><tr><th>Hora</th><th>Tipo</th></tr></thead>
+            <tbody>
+                {''.join([f'<tr><td>{f.fecha_hora[:5]}</td><td>{f.tipo.replace("_", " ").title()}</td></tr>' for f in fichajes_hoy])}
+            </tbody>
+        </table>
+        
+        <p style="margin-top:20px;">
+            <a href="/control-horario/historial" class="btn btn-primary">📊 Ver historial completo</a>
+        </p>
+        
+        <script>
+            // Actualizar temporizador en vivo
+            let segundos = {tiempo_trabajado.seconds};
+            const tiempoElement = document.getElementById('tiempo-trabajado');
+            
+            setInterval(() => {{
+                segundos++;
+                const h = Math.floor(segundos / 3600);
+                const m = Math.floor((segundos % 3600) / 60);
+                const s = segundos % 60;
+                tiempoElement.textContent = `${{h.toString().padStart(2, '0')}}:${{m.toString().padStart(2, '0')}}:${{s.toString().padStart(2, '0')}}`;
+            }}, 1000);
+            
+            // Recordatorio de descanso a las 12:00
+            const ahora = new Date();
+            if (ahora.getHours() === 12 && ahora.getMinutes() === 0) {{
+                alert('☕ ¡Hora del descanso! Tómate 30 minutos.');
+            }}
+        </script>
+    """
+    return base_html(content, "Control Horario")
+
+@app.route('/fichar/<tipo>', methods=['POST'])
+@login_required
+def fichar(tipo):
+    user = db.session.get(Usuario, session['user_id'])
+    ahora = datetime.now()
+    hoy = ahora.strftime('%d/%m/%Y')
+    
+    if tipo == 'entrada':
+        # Verificar que no haya fichado ya hoy
+        existe = Fichaje.query.filter_by(usuario_id=user.id, fecha=hoy, tipo='entrada').first()
+        if not existe:
+            fichaje = Fichaje(
+                usuario_id=user.id,
+                tipo='entrada',
+                fecha_hora=ahora.strftime('%H:%M:%S'),
+                fecha=hoy
+            )
+            db.session.add(fichaje)
+            db.session.commit()
+            flash('✅ Entrada registrada a las ' + ahora.strftime('%H:%M'))
+    
+    elif tipo == 'salida':
+        ultimo = Fichaje.query.filter_by(usuario_id=user.id, fecha=hoy).order_by(Fichaje.id.desc()).first()
+        if ultimo and ultimo.tipo in ['entrada', 'pausa_fin']:
+            fichaje = Fichaje(
+                usuario_id=user.id,
+                tipo='salida',
+                fecha_hora=ahora.strftime('%H:%M:%S'),
+                fecha=hoy
+            )
+            db.session.add(fichaje)
+            db.session.commit()
+            flash('🔴 Salida registrada a las ' + ahora.strftime('%H:%M'))
+    
+    elif tipo == 'pausa':
+        ultimo = Fichaje.query.filter_by(usuario_id=user.id, fecha=hoy).order_by(Fichaje.id.desc()).first()
+        if ultimo:
+            nuevo_tipo = 'pausa_inicio' if ultimo.tipo in ['entrada', 'pausa_fin'] else 'pausa_fin'
+            fichaje = Fichaje(
+                usuario_id=user.id,
+                tipo=nuevo_tipo,
+                fecha_hora=ahora.strftime('%H:%M:%S'),
+                fecha=hoy
+            )
+            db.session.add(fichaje)
+            db.session.commit()
+            flash('☕ ' + ('Pausa iniciada' if nuevo_tipo == 'pausa_inicio' else 'Pausa finalizada'))
+    
+    return redirect('/control-horario')
+
+@app.route('/control-horario/historial')
+@login_required
+def historial_fichajes():
+    user = db.session.get(Usuario, session['user_id'])
+    empleados = None
+    empleado_id = request.args.get('empleado_id', type=int)
+    
+    # Si es admin, puede ver todos o filtrar por empleado
+    if session.get('rol') == 'admin':
+        if empleado_id:
+            user = db.session.get(Usuario, empleado_id)
+            if user:
+                fichajes = Fichaje.query.filter_by(usuario_id=empleado_id).order_by(Fichaje.fecha.desc(), Fichaje.fecha_hora.desc()).all()
+            else:
+                fichajes = []
+        else:
+            fichajes = Fichaje.query.order_by(Fichaje.fecha.desc(), Fichaje.fecha_hora.desc()).all()
+            empleados = Usuario.query.filter_by(rol='empleado').all()
+    else:
+        fichajes = Fichaje.query.filter_by(usuario_id=user.id).order_by(Fichaje.fecha.desc(), Fichaje.fecha_hora.desc()).all()
+    
+    # ... resto del código igual ...
+    
+    # Agrupar por fecha
+    fichajes_por_dia = {}
+    for f in fichajes:
+        if f.fecha not in fichajes_por_dia:
+            fichajes_por_dia[f.fecha] = []
+        fichajes_por_dia[f.fecha].append(f)
+    
+    # Calcular horas por día
+    horas_por_dia = {}
+    for fecha, fichas in fichajes_por_dia.items():
+        tiempo = timedelta()
+        entrada = None
+        for f in fichas:
+            if f.tipo == 'entrada':
+                entrada = datetime.strptime(f.fecha_hora, '%H:%M:%S')
+            elif f.tipo == 'salida' and entrada:
+                salida = datetime.strptime(f.fecha_hora, '%H:%M:%S')
+                tiempo += (salida - entrada)
+                entrada = None
+            elif f.tipo == 'pausa_inicio' and entrada:
+                pausa = datetime.strptime(f.fecha_hora, '%H:%M:%S')
+                tiempo += (pausa - entrada)
+                entrada = None
+            elif f.tipo == 'pausa_fin':
+                entrada = datetime.strptime(f.fecha_hora, '%H:%M:%S')
+        horas_por_dia[fecha] = tiempo
+    
+    # Construir tabla
+    historial_html = ""
+    for fecha, fichas in fichajes_por_dia.items():
+        tiempo_dia = horas_por_dia[fecha]
+        horas = tiempo_dia.seconds // 3600
+        minutos = (tiempo_dia.seconds % 3600) // 60
+        
+        fichas_html = ""
+        for f in fichas:
+            icono = {'entrada': '🟢', 'salida': '🔴', 'pausa_inicio': '☕', 'pausa_fin': '▶️'}.get(f.tipo, '📌')
+            fichas_html += f"<div>{icono} {f.fecha_hora[:5]} - {f.tipo.replace('_', ' ').title()}</div>"
+        
+        historial_html += f"""
+        <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="margin:0;">📅 {fecha}</h3>
+                <div style="font-size: 20px; font-weight: bold; color: #1a73e8;">{horas:02d}:{minutos:02d} h</div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 15px 30px;">
+                {fichas_html}
+            </div>
+        </div>
+        """
+    
+    # Selector de empleado para admin
+    selector_html = ""
+    if session.get('rol') == 'admin' and empleados:
+        selector_html = f"""
+        <div style="margin-bottom: 20px;">
+            <form method="GET" style="display: flex; gap: 10px;">
+                <select name="empleado_id" class="form-control" style="width: auto;">
+                    <option value="">Todos los empleados</option>
+                    {''.join([f'<option value="{e.id}" {"selected" if empleado_id == e.id else ""}>{e.nombre_completo}</option>' for e in empleados])}
+                    </select>
+                <button type="submit" class="btn btn-primary">Filtrar</button>
+            </form>
+        </div>
+        """
+    
+    content = f"""
+        <h2>📊 Historial de Fichajes</h2>
+        {selector_html}
+        
+        <div style="margin-top: 20px;">
+            {historial_html if historial_html else '<p style="text-align:center; color:#999;">No hay fichajes registrados</p>'}
+        </div>
+        
+        <p style="margin-top:20px;">
+            <a href="/control-horario" class="btn btn-primary">← Volver al control horario</a>
+        </p>
+    """
+    return base_html(content, "Historial de Fichajes")
+
+
+
+@app.route('/admin/panel-horario')
+def admin_panel_horario():
+    if 'user_id' not in session or session.get('rol') != 'admin':
+        return redirect('/dashboard')
+    
+    hoy = datetime.now().strftime('%d/%m/%Y')
+    empleados = Usuario.query.filter_by(rol='empleado').all()
+    
+    empleados_html = ""
+    for emp in empleados:
+        fichajes_hoy = Fichaje.query.filter_by(
+            usuario_id=emp.id, 
+            fecha=hoy
+        ).order_by(Fichaje.fecha_hora).all()
+        
+        # Determinar estado
+        estado = '🔴 Ausente'
+        estado_class = 'ausente'
+        if fichajes_hoy:
+            ultimo = fichajes_hoy[-1]
+            if ultimo.tipo == 'entrada' or ultimo.tipo == 'pausa_fin':
+                estado = '🟢 Trabajando'
+                estado_class = 'trabajando'
+            elif ultimo.tipo == 'pausa_inicio':
+                estado = '☕ En pausa'
+                estado_class = 'pausa'
+            elif ultimo.tipo == 'salida':
+                estado = '⚪ Finalizado'
+                estado_class = 'finalizado'
+        
+        # Calcular tiempo trabajado hoy
+        tiempo = timedelta()
+        entrada = None
+        for f in fichajes_hoy:
+            if f.tipo == 'entrada':
+                entrada = datetime.strptime(f.fecha_hora, '%H:%M:%S')
+            elif f.tipo == 'salida' and entrada:
+                salida = datetime.strptime(f.fecha_hora, '%H:%M:%S')
+                tiempo += (salida - entrada)
+                entrada = None
+            elif f.tipo == 'pausa_inicio' and entrada:
+                pausa = datetime.strptime(f.fecha_hora, '%H:%M:%S')
+                tiempo += (pausa - entrada)
+                entrada = None
+            elif f.tipo == 'pausa_fin':
+                entrada = datetime.strptime(f.fecha_hora, '%H:%M:%S')
+        
+        if entrada:
+            tiempo += (datetime.now() - entrada)
+        
+        horas = tiempo.seconds // 3600
+        minutos = (tiempo.seconds % 3600) // 60
+        
+        # Hora de entrada
+        hora_entrada = next((f.fecha_hora[:5] for f in fichajes_hoy if f.tipo == 'entrada'), '--:--')
+        
+        empleados_html += f"""
+        <div class="empleado-horario-card {estado_class}">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 40px; height: 40px; background: #1a73e8; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+                    {emp.nombre_completo[0]}
+                </div>
+                <div style="flex:1;">
+                    <strong>{emp.nombre_completo}</strong>
+                    <div style="font-size: 12px; color: #666;">{emp.departamento}</div>
+                </div>
+            </div>
+            <div style="margin-top: 15px; text-align: center;">
+                <div style="font-size: 24px; font-weight: bold;">{horas:02d}:{minutos:02d}</div>
+                <div style="font-size: 12px; color: #666;">Horas hoy</div>
+            </div>
+            <div style="margin-top: 10px; display: flex; justify-content: space-between;">
+                <span>🚪 Entrada: {hora_entrada}</span>
+                <span>{estado}</span>
+            </div>
+            <div style="margin-top: 10px;">
+                <a href="/control-horario/historial?empleado_id={emp.id}" class="btn btn-primary btn-sm">📊 Ver historial</a>
+            </div>
+        </div>
+        """
+    
+    content = f"""
+        <h2>👑 Panel de Control Horario</h2>
+        <p style="color:#666; margin-bottom:20px;">📅 {hoy} - Visión general del equipo</p>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
+            {empleados_html if empleados_html else '<p>No hay empleados registrados</p>'}
+        </div>
+        
+        <style>
+            .empleado-horario-card {{
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                border-left: 4px solid #ccc;
+            }}
+            .empleado-horario-card.trabajando {{ border-left-color: #27ae60; }}
+            .empleado-horario-card.pausa {{ border-left-color: #f39c12; }}
+            .empleado-horario-card.ausente {{ border-left-color: #95a5a6; }}
+            .empleado-horario-card.finalizado {{ border-left-color: #3498db; }}
+        </style>
+    """
+    return base_html(content, "Panel Horario")
+
+# ========== GESTIÓN DE EXPEDIENTES ==========
+@app.route('/expedientes')
+@login_required
+def expedientes():
+    user = db.session.get(Usuario, session['user_id'])
+    
+    if session.get('rol') == 'admin':
+        tipos = TipoExpediente.query.all()
+        expedientes = Expediente.query.order_by(Expediente.id.desc()).all()
+    else:
+        tipos = TipoExpediente.query.filter(
+            (TipoExpediente.departamento == user.departamento) | 
+            (TipoExpediente.departamento == 'General')
+        ).all()
+        expedientes = Expediente.query.filter_by(departamento=user.departamento).order_by(Expediente.id.desc()).all()
+    
+    # Filtrar por tipo
+    tipo_id = request.args.get('tipo', type=int)
+    if tipo_id:
+        expedientes = [e for e in expedientes if e.tipo_id == tipo_id]
+    
+    expedientes_html = ""
+    for e in expedientes[:20]:
+        docs_count = len(e.documentos)
+        color_tipo = e.tipo.color if e.tipo else '#3498db'
+        estado_class = {'Abierto': 'estado-abierto', 'En proceso': 'estado-proceso', 'Cerrado': 'estado-cerrado'}.get(e.estado, '')
+        
+        expedientes_html += f"""
+        <div class="expediente-card" style="border-top-color: {color_tipo};" onclick="window.location.href='/expediente/{e.id}'">
+            <div class="expediente-header">
+                <span class="expediente-tipo" style="background: {color_tipo};">{e.tipo.nombre if e.tipo else 'General'}</span>
+                <span class="expediente-estado {estado_class}">{e.estado}</span>
+            </div>
+            <h3 style="margin: 10px 0;">{e.titulo[:40]}{'...' if len(e.titulo) > 40 else ''}</h3>
+            <p style="color: #666; font-size: 14px;">{e.descripcion[:60]}{'...' if e.descripcion and len(e.descripcion) > 60 else ''}</p>
+            <div style="display: flex; justify-content: space-between; margin-top: 15px; font-size: 12px; color: #999;">
+                <span>👤 {e.usuario.nombre_completo}</span>
+                <span>📎 {docs_count} archivos</span>
+            </div>
+            <div style="margin-top: 10px; font-size: 12px; color: #999;">
+                📅 {e.fecha_creacion}
+            </div>
+        </div>
+        """
+    
+    # Filtros
+    tipos_html = "".join([f'<a href="?tipo={t.id}" class="btn btn-sm" style="background: {t.color}; color: white; margin: 2px;">{t.nombre}</a>' for t in tipos])
+    
+    content = f"""
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2>📁 Expedientes</h2>
+            <a href="/expediente/nuevo" class="btn btn-success">➕ Nuevo Expediente</a>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <a href="/expedientes" class="btn btn-primary btn-sm">Todos</a>
+            {tipos_html}
+        </div>
+        
+        <div class="expedientes-grid">
+            {expedientes_html if expedientes else '<p style="grid-column:1/-1; text-align:center; color:#999;">No hay expedientes</p>'}
+        </div>
+    """
+    return base_html(content, "Expedientes")
+
+@app.route('/expediente/nuevo', methods=['GET', 'POST'])
+@login_required
+def nuevo_expediente():
+    user = db.session.get(Usuario, session['user_id'])
+    
+    if session.get('rol') == 'admin':
+        tipos = TipoExpediente.query.all()
+    else:
+        tipos = TipoExpediente.query.filter(
+            (TipoExpediente.departamento == user.departamento) | 
+            (TipoExpediente.departamento == 'General')
+        ).all()
+    
+    if request.method == 'POST':
+        expediente = Expediente(
+            tipo_id=request.form['tipo_id'],
+            titulo=request.form['titulo'],
+            descripcion=request.form.get('descripcion', ''),
+            estado=request.form.get('estado', 'Abierto'),
+            usuario_id=user.id,
+            departamento=user.departamento
+        )
+        db.session.add(expediente)
+        db.session.commit()
+        flash('✅ Expediente creado')
+        return redirect(f'/expediente/{expediente.id}')
+    
+    tipos_options = "".join([f'<option value="{t.id}">{t.nombre}</option>' for t in tipos])
+    
+    content = f"""
+        <h2>📁 Nuevo Expediente</h2>
+        <form method="POST" style="max-width: 600px;">
+            <div class="form-group">
+                <label>Tipo de expediente *</label>
+                <select name="tipo_id" class="form-control" required>
+                    <option value="">Seleccionar...</option>
+                    {tipos_options}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Título *</label>
+                <input type="text" name="titulo" class="form-control" maxlength="200" required>
+            </div>
+            <div class="form-group">
+                <label>Descripción</label>
+                <textarea name="descripcion" class="form-control" rows="4" maxlength="1000"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Estado</label>
+                <select name="estado" class="form-control">
+                    <option value="Abierto">Abierto</option>
+                    <option value="En proceso">En proceso</option>
+                    <option value="Cerrado">Cerrado</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Crear Expediente</button>
+            <a href="/expedientes" class="btn" style="background:#95a5a6;color:white;">Cancelar</a>
+        </form>
+    """
+    return base_html(content, "Nuevo Expediente")
+
+@app.route('/expediente/<int:id>', methods=['GET', 'POST'])
+@login_required
+def ver_expediente(id):
+    user = db.session.get(Usuario, session['user_id'])
+    expediente = Expediente.query.get_or_404(id)
+    
+    # Verificar permisos
+    if session.get('rol') != 'admin' and expediente.departamento != user.departamento:
+        flash('❌ No tienes permiso')
+        return redirect('/expedientes')
+    
+    if request.method == 'POST':
+        # Subir archivo
+        if 'archivo' not in request.files:
+            flash('❌ No se seleccionó archivo')
+            return redirect(request.url)
+        
+        file = request.files['archivo']
+        if file.filename == '':
+            flash('❌ No se seleccionó archivo')
+            return redirect(request.url)
+        
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            # Crear nombre único
+            unique_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{filename}"
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_name)
+            file.save(filepath)
+            
+            doc = Documento(
+                nombre=unique_name,
+                nombre_original=filename,
+                tipo_archivo=filename.rsplit('.', 1)[1].lower(),
+                expediente_id=expediente.id,
+                usuario_id=user.id
+            )
+            db.session.add(doc)
+            db.session.commit()
+            flash('✅ Archivo subido')
+        else:
+            flash('❌ Tipo de archivo no permitido')
+        
+        return redirect(f'/expediente/{id}')
+    
+    # Lista de documentos
+    docs_html = ""
+    for d in expediente.documentos:
+        icono = {'pdf': '📄', 'doc': '📝', 'docx': '📝', 'xls': '📊', 'xlsx': '📊', 'png': '🖼️', 'jpg': '🖼️', 'jpeg': '🖼️'}.get(d.tipo_archivo, '📎')
+        docs_html += f"""
+        <div class="documento-item">
+            <span class="documento-icono">{icono}</span>
+            <div style="flex:1;">
+                <a href="/uploads/{d.nombre}" target="_blank">{d.nombre_original}</a>
+                <div style="font-size:11px; color:#999;">{d.fecha_subida} - {d.usuario.nombre_completo}</div>
+            </div>
+            <a href="/documento/eliminar/{d.id}" class="btn btn-danger btn-sm" onclick="return confirm('¿Eliminar archivo?')">🗑️</a>
+        </div>
+        """
+    
+    content = f"""
+        <h2>📁 {expediente.titulo}</h2>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div class="card">
+                <h3>📋 Información</h3>
+                <p><strong>Tipo:</strong> <span style="background:{expediente.tipo.color if expediente.tipo else '#3498db'}; color:white; padding:3px 10px; border-radius:20px;">{expediente.tipo.nombre if expediente.tipo else 'General'}</span></p>
+                <p><strong>Estado:</strong> {expediente.estado}</p>
+                <p><strong>Departamento:</strong> {expediente.departamento}</p>
+                <p><strong>Creado por:</strong> {expediente.usuario.nombre_completo}</p>
+                <p><strong>Fecha:</strong> {expediente.fecha_creacion}</p>
+                <p><strong>Descripción:</strong><br>{expediente.descripcion or 'Sin descripción'}</p>
+                
+                <div style="margin-top:20px;">
+                    <a href="/expediente/editar/{expediente.id}" class="btn btn-warning">✏️ Editar</a>
+                    <a href="/expediente/eliminar/{expediente.id}" class="btn btn-danger" onclick="return confirm('¿Eliminar este expediente?')">🗑️ Eliminar</a>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>📎 Documentos ({len(expediente.documentos)})</h3>
+                
+                <form method="POST" enctype="multipart/form-data" style="margin-bottom:20px; padding:15px; background:#f8f9fa; border-radius:8px;">
+                    <div class="form-group">
+                        <label>Adjuntar archivo (PDF, Word, Excel, Imagen)</label>
+                        <input type="file" name="archivo" class="form-control" required accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg">
+                    </div>
+                    <button type="submit" class="btn btn-primary">📤 Subir Archivo</button>
+                </form>
+                
+                <div class="documentos-lista">
+                    {docs_html if docs_html else '<p style="color:#999;">No hay documentos adjuntos</p>'}
+                </div>
+            </div>
+        </div>
+        
+        <p style="margin-top:20px;">
+            <a href="/expedientes" class="btn" style="background:#95a5a6;color:white;">← Volver</a>
+        </p>
+    """
+    return base_html(content, f"Expediente: {expediente.titulo[:30]}")
+
+@app.route('/expediente/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_expediente(id):
+    user = db.session.get(Usuario, session['user_id'])
+    expediente = Expediente.query.get_or_404(id)
+    
+    if session.get('rol') != 'admin' and expediente.usuario_id != user.id:
+        flash('❌ No tienes permiso')
+        return redirect('/expedientes')
+    
+    if request.method == 'POST':
+        expediente.titulo = request.form['titulo']
+        expediente.descripcion = request.form.get('descripcion', '')
+        expediente.estado = request.form.get('estado', expediente.estado)
+        db.session.commit()
+        flash('✅ Expediente actualizado')
+        return redirect(f'/expediente/{id}')
+    
+    content = f"""
+        <h2>✏️ Editar Expediente</h2>
+        <form method="POST" style="max-width: 600px;">
+            <div class="form-group">
+                <label>Título *</label>
+                <input type="text" name="titulo" class="form-control" value="{expediente.titulo}" maxlength="200" required>
+            </div>
+            <div class="form-group">
+                <label>Descripción</label>
+                <textarea name="descripcion" class="form-control" rows="4" maxlength="1000">{expediente.descripcion or ''}</textarea>
+            </div>
+            <div class="form-group">
+                <label>Estado</label>
+                <select name="estado" class="form-control">
+                    <option value="Abierto" {'selected' if expediente.estado == 'Abierto' else ''}>Abierto</option>
+                    <option value="En proceso" {'selected' if expediente.estado == 'En proceso' else ''}>En proceso</option>
+                    <option value="Cerrado" {'selected' if expediente.estado == 'Cerrado' else ''}>Cerrado</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+            <a href="/expediente/{id}" class="btn" style="background:#95a5a6;color:white;">Cancelar</a>
+        </form>
+    """
+    return base_html(content, "Editar Expediente")
+
+@app.route('/expediente/eliminar/<int:id>')
+@login_required
+def eliminar_expediente(id):
+    user = db.session.get(Usuario, session['user_id'])
+    expediente = Expediente.query.get_or_404(id)
+    
+    if session.get('rol') != 'admin' and expediente.usuario_id != user.id:
+        flash('❌ No tienes permiso')
+        return redirect('/expedientes')
+    
+    # Eliminar archivos físicos
+    for doc in expediente.documentos:
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], doc.nombre)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    
+    db.session.delete(expediente)
+    db.session.commit()
+    flash('✅ Expediente eliminado')
+    return redirect('/expedientes')
+
+@app.route('/documento/eliminar/<int:id>')
+@login_required
+def eliminar_documento(id):
+    doc = Documento.query.get_or_404(id)
+    expediente_id = doc.expediente_id
+    
+    # Eliminar archivo físico
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], doc.nombre)
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    
+    db.session.delete(doc)
+    db.session.commit()
+    flash('✅ Documento eliminado')
+    return redirect(f'/expediente/{expediente_id}')
+
+# Ruta para servir archivos
+@app.route('/uploads/<filename>')
+@login_required
+def uploaded_file(filename):
+    from flask import send_from_directory
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+# ========== ADMIN: GESTIÓN DE TIPOS DE EXPEDIENTE ==========
+@app.route('/admin/tipos-expediente')
+@login_required
+def admin_tipos_expediente():
+    if session.get('rol') != 'admin':
+        return redirect('/dashboard')
+    
+    tipos = TipoExpediente.query.all()
+    
+    tipos_html = ""
+    for t in tipos:
+        tipos_html += f"""
+        <tr>
+            <td><span style="background:{t.color}; padding:3px 10px; border-radius:20px; color:white;">{t.nombre}</span></td>
+            <td>{t.descripcion[:50]}...</td>
+            <td>{t.departamento}</td>
+            <td>
+                <a href="/admin/tipo-expediente/editar/{t.id}" class="btn btn-warning btn-sm">✏️</a>
+                <a href="/admin/tipo-expediente/eliminar/{t.id}" class="btn btn-danger btn-sm" onclick="return confirm('¿Eliminar tipo?')">🗑️</a>
+            </td>
+        </tr>
+        """
+    
+    content = f"""
+        <h2>⚙️ Configurar Tipos de Expediente</h2>
+        <p><a href="/admin/tipo-expediente/nuevo" class="btn btn-success">➕ Nuevo Tipo</a></p>
+        
+        <table>
+            <thead>
+                <tr><th>Nombre</th><th>Descripción</th><th>Departamento</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+                {tipos_html if tipos else '<tr><td colspan="4">No hay tipos configurados</td></tr>'}
+            </tbody>
+        </table>
+        
+        <p style="margin-top:20px;"><a href="/expedientes" class="btn btn-primary">← Ir a Expedientes</a></p>
+    """
+    return base_html(content, "Tipos de Expediente")
+
+@app.route('/admin/tipo-expediente/nuevo', methods=['GET', 'POST'])
+@login_required
+def nuevo_tipo_expediente():
+    if session.get('rol') != 'admin':
+        return redirect('/dashboard')
+    
+    if request.method == 'POST':
+        tipo = TipoExpediente(
+            nombre=request.form['nombre'],
+            descripcion=request.form.get('descripcion', ''),
+            departamento=request.form.get('departamento', 'General'),
+            color=request.form.get('color', '#3498db'),
+            admin_id=session['user_id']
+        )
+        db.session.add(tipo)
+        db.session.commit()
+        flash('✅ Tipo de expediente creado')
+        return redirect('/admin/tipos-expediente')
+    
+    departamentos = db.session.query(Usuario.departamento).distinct().all()
+    deptos_options = "".join([f'<option value="{d[0]}">{d[0]}</option>' for d in departamentos])
+    
+    content = f"""
+        <h2>➕ Nuevo Tipo de Expediente</h2>
+        <form method="POST" style="max-width: 500px;">
+            <div class="form-group">
+                <label>Nombre *</label>
+                <input type="text" name="nombre" class="form-control" maxlength="100" required>
+            </div>
+            <div class="form-group">
+                <label>Descripción</label>
+                <textarea name="descripcion" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Departamento</label>
+                <select name="departamento" class="form-control">
+                    <option value="General">General (todos)</option>
+                    {deptos_options}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Color</label>
+                <select name="color" class="form-control">
+                    <option value="#3498db">🔵 Azul</option>
+                    <option value="#27ae60">🟢 Verde</option>
+                    <option value="#e74c3c">🔴 Rojo</option>
+                    <option value="#f39c12">🟡 Naranja</option>
+                    <option value="#9b59b6">🟣 Morado</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Crear Tipo</button>
+            <a href="/admin/tipos-expediente" class="btn" style="background:#95a5a6;color:white;">Cancelar</a>
+        </form>
+    """
+    return base_html(content, "Nuevo Tipo Expediente")
+
+
+
 
 # ========== INICIALIZACIÓN ==========
 with app.app_context():
